@@ -105,17 +105,18 @@ config(){
     --arg rsni "$REALITY_SNI" --arg rpriv "$REALITY_PRIVATE_KEY" --arg rsid "$REALITY_SHORT_ID" --arg cert "$CERT_FILE" --arg key "$KEY_FILE" \
     --arg wsp "$WS_PATH" --arg wwsp "$WARP_WS_PATH" --arg we "$WARP_ENABLED" --arg wpriv "$WARP_PRIVATE_KEY" --arg wa4 "$WARP_ADDRESS4" --arg wa6 "$WARP_ADDRESS6" \
     --arg wsrv "$WARP_SERVER" --argjson wport "$WARP_PEER_PORT" --arg wpub "$WARP_PEER_PUBLIC_KEY" '
-    {
-      log:{level:"warn",timestamp:true}, dns:{servers:[{type:"local",tag:"dns"}],final:"dns",strategy:"prefer_ipv4"},
-      inbounds:[
+    ({
+      log:{level:"warn",timestamp:true},
+      dns:{servers:[{type:"local",tag:"dns"}],final:"dns",strategy:"prefer_ipv4"},
+      inbounds: ([
         {type:"vless",tag:"reality",listen:"::",listen_port:$rp,users:[{uuid:$ru,flow:"xtls-rprx-vision"}],tls:{enabled:true,server_name:$rsni,reality:{enabled:true,handshake:{server:$rsni,server_port:443},private_key:$rpriv,short_id:[$rsid]}}},
         {type:"hysteria2",tag:"hy2",listen:"::",listen_port:$hp,users:[{password:$hpass}],obfs:{type:"salamander",password:$hobfs},tls:{enabled:true,alpn:["h3"],certificate_path:$cert,key_path:$key}},
         {type:"anytls",tag:"anytls",listen:"::",listen_port:$ap,users:[{password:$apass}],tls:{enabled:true,certificate_path:$cert,key_path:$key}},
         {type:"vless",tag:"cf-ws",listen:"127.0.0.1",listen_port:$wp,users:[{uuid:$wu}],transport:{type:"ws",path:$wsp}}
-      ] + (if $we=="true" then [{type:"vless",tag:"cf-warp-ws",listen:"127.0.0.1",listen_port:$wwp,users:[{uuid:$wwu}],transport:{type:"ws",path:$wwsp}}] else [] end),
+      ] + (if $we=="true" then [{type:"vless",tag:"cf-warp-ws",listen:"127.0.0.1",listen_port:$wwp,users:[{uuid:$wwu}],transport:{type:"ws",path:$wwsp}}] else [] end)),
       outbounds:[{type:"direct",tag:"direct"}],
       route:{auto_detect_interface:true,default_domain_resolver:"dns",rules:(if $we=="true" then [{inbound:["cf-warp-ws"],action:"route",outbound:"warp"}] else [] end),final:"direct"}
-    } + (if $we=="true" then {endpoints:[{type:"wireguard",tag:"warp",mtu:1280,address:[$wa4,$wa6]|map(select(length>0)),private_key:$wpriv,peers:[{address:$wsrv,port:$wport,public_key:$wpub,allowed_ips:["0.0.0.0/0","::/0"],persistent_keepalive_interval:30}]}]} else {} end)
+    }) + (if $we=="true" then {endpoints:[{type:"wireguard",tag:"warp",mtu:1280,address:[$wa4,$wa6]|map(select(length>0)),private_key:$wpriv,peers:[{address:$wsrv,port:$wport,public_key:$wpub,allowed_ips:["0.0.0.0/0","::/0"],persistent_keepalive_interval:30}]}]} else {} end)
   ' > "$CONFIG_FILE"
   chmod 600 "$CONFIG_FILE"; "$SING_BOX_BIN" check -c "$CONFIG_FILE"
 }
@@ -196,10 +197,8 @@ quick_host(){ journalctl -u "$CF_SERVICE_NAME" -n 120 --no-pager 2>/dev/null | g
 yq(){ printf "'%s'" "$(sed "s/'/''/g" <<<"$1")"; }
 
 flclash(){
-  source "$STATE_FILE"; local s c warp_ready=false
-  s="$(server_addr)"; c="$CF_HOST"; [[ -n "$c" ]] || c="$(quick_host)"
-  [[ "$WARP_ENABLED" == true && -n "$CF_TUNNEL_TOKEN" && -n "$WARP_CF_HOST" ]] && warp_ready=true
-  cat > "$FLCLASH_FILE" <<YAML
+  source "$STATE_FILE"; local s c w; s="$(server_addr)"; c="${CF_HOST:-$(quick_host)}"; w="${WARP_CF_HOST:-}"
+  cat > "$FLCLASH_FILE" <<EOF
 mode: rule
 log-level: warning
 ipv6: true
@@ -209,67 +208,17 @@ dns:
   enhanced-mode: fake-ip
   nameserver: [https://1.1.1.1/dns-query, https://8.8.8.8/dns-query]
 proxies:
-  - name: VLESS-Reality
-    type: vless
-    server: $(yq "$s")
-    port: $REALITY_PORT
-    uuid: $(yq "$REALITY_UUID")
-    network: tcp
-    tls: true
-    udp: true
-    flow: xtls-rprx-vision
-    servername: $(yq "$REALITY_SNI")
-    client-fingerprint: chrome
-    reality-opts: {public-key: $(yq "$REALITY_PUBLIC_KEY"), short-id: $(yq "$REALITY_SHORT_ID")}
-  - name: Hysteria2
-    type: hysteria2
-    server: $(yq "$s")
-    port: $HY2_PORT
-    password: $(yq "$HY2_PASSWORD")
-    obfs: salamander
-    obfs-password: $(yq "$HY2_OBFS")
-    sni: $(yq "$TLS_SNI")
-    skip-cert-verify: true
-    alpn: [h3]
-  - name: AnyTLS
-    type: anytls
-    server: $(yq "$s")
-    port: $ANYTLS_PORT
-    password: $(yq "$ANYTLS_PASSWORD")
-    sni: $(yq "$TLS_SNI")
-    client-fingerprint: chrome
-    udp: true
-    skip-cert-verify: true
-YAML
-  if [[ -n "$c" ]]; then cat >> "$FLCLASH_FILE" <<YAML
-  - name: VLESS-CF-WS
-    type: vless
-    server: $(yq "$c")
-    port: 443
-    uuid: $(yq "$WS_UUID")
-    network: ws
-    tls: true
-    udp: true
-    servername: $(yq "$c")
-    client-fingerprint: chrome
-    ws-opts: {path: $(yq "$WS_PATH"), headers: {Host: $(yq "$c")}}
-YAML
-  fi
-  if [[ "$warp_ready" == true ]]; then cat >> "$FLCLASH_FILE" <<YAML
-  - name: VLESS-CF-WARP
-    type: vless
-    server: $(yq "$WARP_CF_HOST")
-    port: 443
-    uuid: $(yq "$WARP_WS_UUID")
-    network: ws
-    tls: true
-    udp: true
-    servername: $(yq "$WARP_CF_HOST")
-    client-fingerprint: chrome
-    ws-opts: {path: $(yq "$WARP_WS_PATH"), headers: {Host: $(yq "$WARP_CF_HOST")}}
-YAML
-  fi
-  cat >> "$FLCLASH_FILE" <<YAML
+  - {name: VLESS-Reality, type: vless, server: $(yq "$s"), port: $REALITY_PORT, uuid: $(yq "$REALITY_UUID"), network: tcp, tls: true, udp: true, flow: xtls-rprx-vision, servername: $(yq "$REALITY_SNI"), client-fingerprint: chrome, reality-opts: {public-key: $(yq "$REALITY_PUBLIC_KEY"), short-id: $(yq "$REALITY_SHORT_ID")}}
+  - {name: Hysteria2, type: hysteria2, server: $(yq "$s"), port: $HY2_PORT, password: $(yq "$HY2_PASSWORD"), obfs: salamander, obfs-password: $(yq "$HY2_OBFS"), sni: $(yq "$TLS_SNI"), skip-cert-verify: true, alpn: [h3]}
+  - {name: AnyTLS, type: anytls, server: $(yq "$s"), port: $ANYTLS_PORT, password: $(yq "$ANYTLS_PASSWORD"), sni: $(yq "$TLS_SNI"), client-fingerprint: chrome, udp: true, skip-cert-verify: true}
+EOF
+  [[ -n "$c" ]] && cat >> "$FLCLASH_FILE" <<EOF
+  - {name: VLESS-CF-WS, type: vless, server: $(yq "$c"), port: 443, uuid: $(yq "$WS_UUID"), network: ws, tls: true, udp: true, servername: $(yq "$c"), client-fingerprint: chrome, ws-opts: {path: $(yq "$WS_PATH"), headers: {Host: $(yq "$c")}}}
+EOF
+  [[ "$WARP_ENABLED" == true && -n "$w" ]] && cat >> "$FLCLASH_FILE" <<EOF
+  - {name: VLESS-CF-WARP, type: vless, server: $(yq "$w"), port: 443, uuid: $(yq "$WARP_WS_UUID"), network: ws, tls: true, udp: true, servername: $(yq "$w"), client-fingerprint: chrome, ws-opts: {path: $(yq "$WARP_WS_PATH"), headers: {Host: $(yq "$w")}}}
+EOF
+  cat >> "$FLCLASH_FILE" <<'EOF'
 proxy-groups:
   - name: Proxy
     type: select
@@ -277,39 +226,23 @@ proxy-groups:
       - VLESS-Reality
       - Hysteria2
       - AnyTLS
-YAML
-  [[ -n "$c" ]] && echo '      - VLESS-CF-WS' >> "$FLCLASH_FILE"; [[ "$warp_ready" == true ]] && echo '      - VLESS-CF-WARP' >> "$FLCLASH_FILE"
-  cat >> "$FLCLASH_FILE" <<YAML
+EOF
+  [[ -n "$c" ]] && echo '      - VLESS-CF-WS' >> "$FLCLASH_FILE"
+  [[ "$WARP_ENABLED" == true && -n "$w" ]] && echo '      - VLESS-CF-WARP' >> "$FLCLASH_FILE"
+  cat >> "$FLCLASH_FILE" <<'EOF'
       - DIRECT
-  - name: Auto
-    type: url-test
-    url: https://www.gstatic.com/generate_204
-    interval: 300
-    proxies:
-      - VLESS-Reality
-      - Hysteria2
-      - AnyTLS
-YAML
-  [[ -n "$c" ]] && echo '      - VLESS-CF-WS' >> "$FLCLASH_FILE"; [[ "$warp_ready" == true ]] && echo '      - VLESS-CF-WARP' >> "$FLCLASH_FILE"
-  printf '\nrules:\n  - MATCH,Proxy\n' >> "$FLCLASH_FILE"; chmod 600 "$FLCLASH_FILE"
+rules:
+  - MATCH,Proxy
+EOF
+  chmod 600 "$FLCLASH_FILE"
 }
 
-firewall(){
-  if command -v ufw >/dev/null && ufw status | grep -q '^Status: active'; then ufw allow "$REALITY_PORT/tcp" >/dev/null; ufw allow "$HY2_PORT/udp" >/dev/null; ufw allow "$ANYTLS_PORT/tcp" >/dev/null; else warn "云安全组需放行 TCP $REALITY_PORT、TCP $ANYTLS_PORT、UDP $HY2_PORT"; fi
-}
-summary(){ source "$STATE_FILE"; printf "\n${B}=== sing-box-google ===${N}\nReality: %s/tcp direct\nHY2: %s/udp direct\nAnyTLS: %s/tcp direct\nCF-WS: %s%s -> 127.0.0.1:%s direct\nCF-WARP: %s%s -> 127.0.0.1:%s -> WARP (%s)\nFlClash: %s\n\n" "$REALITY_PORT" "$HY2_PORT" "$ANYTLS_PORT" "${CF_HOST:-Quick-Tunnel}" "$WS_PATH" "$WS_PORT" "${WARP_CF_HOST:-未设置}" "$WARP_WS_PATH" "$WARP_WS_PORT" "$WARP_ENABLED" "$FLCLASH_FILE"; }
-install_cli(){ curl -fsSL "$SELF_URL" -o "$BIN_DIR/sb" && chmod 755 "$BIN_DIR/sb" || true; }
+summary(){ source "$STATE_FILE"; printf "\n${B}=== sing-box-google ===${N}\nReality: %s/tcp direct\nHY2: %s/udp direct\nAnyTLS: %s/tcp direct\nCF-WS: %s%s -> 127.0.0.1:%s -> direct\nCF-WARP: %s%s -> 127.0.0.1:%s -> WARP (%s)\nFlClash: %s\n\n" "$REALITY_PORT" "$HY2_PORT" "$ANYTLS_PORT" "${CF_HOST:-Quick-Tunnel}" "$WS_PATH" "$WS_PORT" "${WARP_CF_HOST:-未配置}" "$WARP_WS_PATH" "$WARP_WS_PORT" "$WARP_ENABLED" "$FLCLASH_FILE"; }
 
-install_all(){
-  root; check_os; arch; deps; stop_services; check_ports; mkdir -p "$INSTALL_DIR"; chmod 700 "$INSTALL_DIR"
-  [[ -n "$CF_TUNNEL_TOKEN" ]] || warn "未设置固定 Tunnel Token：只能生成 Quick Tunnel 的普通 CF-WS，无法同时映射 WARP 节点"
-  [[ -n "$WARP_CF_HOST" || -z "$CF_TUNNEL_TOKEN" ]] || warn "WARP_CF_HOST 为空"
-  install_bins; cert; credentials; warp; config; state; services; firewall; flclash; install_cli; summary; log "完成，运行 sb show 查看配置"
-}
-status_cmd(){ root; systemctl is-active "$SERVICE_NAME" || true; systemctl is-active "$CF_SERVICE_NAME" || true; [[ -s "$STATE_FILE" ]] && summary; }
-show_cmd(){ root; [[ -s "$STATE_FILE" ]] || die "尚未安装"; flclash; summary; cat "$FLCLASH_FILE"; }
-restart_cmd(){ root; systemctl restart "$SERVICE_NAME" "$CF_SERVICE_NAME"; sleep 2; status_cmd; }
-logs_cmd(){ root; journalctl -u "$SERVICE_NAME" -u "$CF_SERVICE_NAME" -n 120 --no-pager; }
-uninstall_cmd(){ root; systemctl disable --now "$SERVICE_NAME" "$CF_SERVICE_NAME" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$SERVICE_NAME.service" "/etc/systemd/system/$CF_SERVICE_NAME.service" "$SING_BOX_BIN" "$CLOUDFLARED_BIN" "$WGCF_BIN" "$BIN_DIR/sb"; rm -rf "$INSTALL_DIR"; systemctl daemon-reload; }
-menu(){ printf '1) 一键安装/重装\n2) 状态\n3) FlClash\n4) 重启\n5) 日志\n6) 卸载\n0) 退出\n'; read -r -p '请选择: ' x; case "$x" in 1) install_all;;2) status_cmd;;3) show_cmd;;4) restart_cmd;;5) logs_cmd;;6) uninstall_cmd;;0) exit;;*) die "无效选择";; esac; }
-case "${1:-}" in install) install_all;;status) status_cmd;;show) show_cmd;;restart) restart_cmd;;logs) logs_cmd;;uninstall) uninstall_cmd;;"") [[ -t 0 ]] && menu || install_all;;*) echo '用法: sb {install|status|show|restart|logs|uninstall}';; esac
+install_all(){ root; check_os; arch; deps; stop_services; check_ports; mkdir -p "$INSTALL_DIR"; install_bins; cert; credentials; warp; config; state; services; flclash; curl -fsSL "$SELF_URL" -o "$BIN_DIR/sb"; chmod 755 "$BIN_DIR/sb"; summary; }
+status(){ root; systemctl is-active "$SERVICE_NAME" || true; systemctl is-active "$CF_SERVICE_NAME" || true; [[ -f "$STATE_FILE" ]] && summary; }
+show(){ root; flclash; summary; cat "$FLCLASH_FILE"; }
+restart(){ root; systemctl restart "$SERVICE_NAME" "$CF_SERVICE_NAME"; status; }
+uninstall(){ root; systemctl disable --now "$CF_SERVICE_NAME" "$SERVICE_NAME" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$CF_SERVICE_NAME.service" "/etc/systemd/system/$SERVICE_NAME.service" "$BIN_DIR/sing-box" "$BIN_DIR/cloudflared" "$BIN_DIR/wgcf" "$BIN_DIR/sb"; rm -rf "$INSTALL_DIR"; systemctl daemon-reload; }
+menu(){ printf '1) 一键安装 / 重装\n2) 状态\n3) 显示 FlClash\n4) 重启\n5) 日志\n6) 卸载\n0) 退出\n'; read -r -p '请选择: ' x; case "$x" in 1) install_all;;2) status;;3) show;;4) restart;;5) journalctl -u "$SERVICE_NAME" -u "$CF_SERVICE_NAME" -n120 --no-pager;;6) uninstall;;0) exit;;*) die "无效选择";;esac; }
+case "${1:-}" in install) install_all;;status) status;;show) show;;restart) restart;;logs) journalctl -u "$SERVICE_NAME" -u "$CF_SERVICE_NAME" -n120 --no-pager;;uninstall) uninstall;;"") menu;;*) die "未知命令";;esac
