@@ -86,16 +86,21 @@ credentials(){
 warp(){
   WARP_ENABLED=false; WARP_PRIVATE_KEY=""; WARP_ADDRESS4=""; WARP_ADDRESS6=""; WARP_PEER_PUBLIC_KEY=""; WARP_PEER_PORT=2408; WARP_SERVER=""
   [[ "$WARP_MODE" != off ]] || return 0
-  local d="$INSTALL_DIR/warp" p a; mkdir -p "$d"; chmod 700 "$d"
+  local d="$INSTALL_DIR/warp" p a endpoint; mkdir -p "$d"; chmod 700 "$d"
   log "配置 Cloudflare WARP"
   [[ -s "$d/wgcf-account.toml" ]] || "$WGCF_BIN" register --accept-tos --config "$d/wgcf-account.toml" || { warn "WARP 注册失败"; return 0; }
   "$WGCF_BIN" generate --config "$d/wgcf-account.toml" --profile "$d/wgcf-profile.conf" || { warn "WARP profile 生成失败"; return 0; }
-  p="$d/wgcf-profile.conf"; a="$(awk -F' *= *' '/^Address *=/{print $2;exit}' "$p")"
-  WARP_PRIVATE_KEY="$(awk -F' *= *' '/^PrivateKey *=/{print $2;exit}' "$p")"; WARP_PEER_PUBLIC_KEY="$(awk -F' *= *' '/^PublicKey *=/{print $2;exit}' "$p")"
-  WARP_PEER_PORT="$(awk -F' *= *' '/^Endpoint *=/{sub(/^.*:/,"",$2);print $2;exit}' "$p")"; [[ "$WARP_PEER_PORT" =~ ^[0-9]+$ ]] || WARP_PEER_PORT=2408
+  p="$d/wgcf-profile.conf"
+  a="$(sed -n 's/^[[:space:]]*Address[[:space:]]*=[[:space:]]*//p' "$p" | head -1)"
+  WARP_PRIVATE_KEY="$(sed -n 's/^[[:space:]]*PrivateKey[[:space:]]*=[[:space:]]*//p' "$p" | head -1 | tr -d '\r')"
+  WARP_PEER_PUBLIC_KEY="$(sed -n 's/^[[:space:]]*PublicKey[[:space:]]*=[[:space:]]*//p' "$p" | head -1 | tr -d '\r')"
+  endpoint="$(sed -n 's/^[[:space:]]*Endpoint[[:space:]]*=[[:space:]]*//p' "$p" | head -1 | tr -d '\r')"
+  WARP_PEER_PORT="${endpoint##*:}"; [[ "$WARP_PEER_PORT" =~ ^[0-9]+$ ]] || WARP_PEER_PORT=2408
   WARP_ADDRESS4="$(grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+' <<<"$a" | head -1 || true)"; WARP_ADDRESS6="$(grep -oE '([0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f:]+/[0-9]+' <<<"$a" | head -1 || true)"
   if curl -4fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace >/dev/null 2>&1; then WARP_SERVER=162.159.192.1; else WARP_SERVER=2606:4700:d0::a29f:c001; fi
-  [[ -n "$WARP_PRIVATE_KEY$WARP_PEER_PUBLIC_KEY$WARP_ADDRESS4$WARP_ADDRESS6$WARP_SERVER" ]] || { warn "WARP 参数不完整"; return 0; }
+  [[ ${#WARP_PRIVATE_KEY} -eq 44 ]] || { warn "WARP 私钥格式异常"; return 0; }
+  [[ ${#WARP_PEER_PUBLIC_KEY} -eq 44 ]] || { warn "WARP 公钥格式异常"; return 0; }
+  [[ -n "$WARP_ADDRESS4$WARP_ADDRESS6$WARP_SERVER" ]] || { warn "WARP 参数不完整"; return 0; }
   WARP_ENABLED=true; log "WARP 已启用，仅 VLESS-CF-WARP 节点使用 WARP 出站"
 }
 
