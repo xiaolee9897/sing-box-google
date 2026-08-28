@@ -1,116 +1,262 @@
-### 一、Sing-box-yg精装桶一键五协议共存脚本（VPS专用）
-### 二、Serv00/Hostuno-sb-yg多平台一键三协议共存脚本（Serv00/Hostuno专用）
+# sing-box-google
 
-### 注：本项目分享订阅节点都为本地化生成，不使用节点转换、订阅器等第三方外链引用，无需担心节点订阅被外链作者查看
+一个面向 **Debian / Ubuntu VPS** 的精简一键部署脚本。
 
-### 交流平台：[甬哥博客地址](https://ygkkk.blogspot.com)、[甬哥YouTube频道](https://www.youtube.com/@ygkkk)、[甬哥TG电报群组](https://t.me/+jZHc6-A-1QQ5ZGVl)、[甬哥TG电报频道](https://t.me/+DkC9ZZUgEFQzMTZl)
+当前 `main` 只保留实际使用的 VPS 功能，不再包含 Serv00/Hostuno、网页保活、内置大体积二进制等历史代码。
 
-----------------------------------------------------------------
-#### 推荐推广：极简 + 轻量 + 快速的多协议的ArgoSBX脚本，请移步到[ArgoSBX脚本项目](https://github.com/yonggekkk/argosbx)
+## 五合一能力
 
---------------------------------------------------------------
+1. **VLESS-Reality-Vision** — TCP
+2. **Hysteria2 + Salamander** — UDP
+3. **AnyTLS** — TCP
+4. **VLESS-CF-WS** — VLESS WebSocket + Cloudflare Tunnel
+5. **Cloudflare WARP** — 作为 VPS 代理流量的默认出站
 
-### 一、Sing-box-yg精装桶小白专享一键五协议共存脚本（VPS专用）
+> WARP 是出站 VPN，不是第五个 sing-box 入站监听器。FlClash 中生成四个可选 VPS 节点；这四个节点默认统一经 VPS 上的 WARP 出口访问互联网。
 
-* 支持人气最高的五大协议：Vless-reality-vision、Vmess-ws(tls)/Argo、Hysteria-2、Tuic-v5、Anytls
+## 设计目标
 
-* 支持纯IPV6、纯IPV4、双栈VPS，支持amd与arm架构，支持alpine系统，推荐使用最新的Ubuntu系统
+- 一键安装，默认无需域名和证书
+- sing-box 单进程承载 Reality / Hysteria2 / AnyTLS / VLESS-WS
+- VLESS-CF-WS 默认使用 Cloudflare Quick Tunnel；支持固定 Tunnel Token
+- WARP 使用 `wgcf` 注册，并通过 sing-box 1.13+ WireGuard Endpoint 接入
+- 自动生成 FlClash / Mihomo YAML
+- systemd 守护与开机自启
+- 不关闭系统防火墙；仅在检测到 UFW/firewalld 已启用时放行必要端口
+- 配置及凭据仅保存在 VPS 本地 `/etc/singbox-google`
 
-* 小白简单模式：无需域名证书，回车三次就安装完成，复制、扫描你要的节点配置
+## 支持范围
 
-#### 相关说明及注意点请查看[甬哥博客说明与Sing-box视频教程](https://ygkkk.blogspot.com/2023/10/sing-box-yg.html)
+- Debian / Ubuntu
+- amd64 / arm64
+- systemd
+- IPv4、IPv6 或双栈 VPS
 
-#### 视频教程：
-[SSH连不上？使用VPS内置SSH，配合一键功能化脚本命令，小白也能快速搭节点！（Racknerd等所有VPS通用）](https://youtu.be/vhqPG9h8PB4)
+不再支持：
 
-[Racknerd VPS：小白自建最强翻墙代理协议组合方案；高速、稳定、无视IP被封；解决Google gemini无法使用问题](https://youtu.be/aGEmCu503V8)
+- Serv00 / Hostuno
+- VMess
+- TUIC
+- Web 保活
+- GitHub Actions 保活
+- 仓库内置 sing-box 二进制
 
-[🥇搭建代理9大问题排行榜：第4名全网99%的人被误导！第1名每个人都被折腾到爆！](https://youtu.be/pJwJBqBkcfw)
+## 一键安装
 
-[🥇2025年度代理协议"拉到夯"综合排名](https://youtu.be/IoFtykGXDao)
-
-[Sing-box精装桶小白一键脚本（一）：配置文件通吃SFA/SFI/SFW三平台客户端，Argo隧道、双证书切换、域名分流](https://youtu.be/QwTapeVPeB0)
-
-[Sing-box精装桶小白一键脚本（二）：纯IPV6 VPS搭建，CDN优选IP设置汇总，全平台多种客户端一个脚本全套带走](https://youtu.be/kmTgj1DundU)
-
-[Sing-box精装桶小白一键脚本（三）：自建gitlab私有订阅链接一键同步推送全平台，WARP分流ChatGPT，SFW电脑客户端支持订阅链接](https://youtu.be/by7C2HU6-fU)
-
-[Sing-box精装桶小白一键脚本（四）：vmess协议CDN优选IP多形态设置(详见说明图)](https://youtu.be/Qfm8DbLeb6w)
-
-[Sing-box精装桶小白一键脚本（五）：集成oblivion warp免费vpn功能，本地WARP+赛风VPN切换分流(30个国家IP)](https://youtu.be/5Y6NPsYPws0)
-
-[Sing-box精装桶五合一脚本重磅更新（六）：新增AnyTLS协议；本地IP订阅自动同步更新，通吃Clash/Mihomo、Sing-box与聚合节点](https://youtu.be/LF0-n6-Z6kI)
-
-### VPS专用一键脚本如下：快捷方式：```sb```
-
-```
-bash <(wget -qO- https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
-```
-或者
-```
-bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaolee9897/sing-box-google/main/sb.sh)
 ```
 
-一键快捷命令现实本地IP订阅：```printf '3\n8\n1\n订阅密码' | sb```
+首次安装完成后会写入快捷命令：
 
-一键快捷命令现实Argo临时隧道：```printf '3\n3\n1\n1' | sb```
-
-一键快捷命令现实Argo固定隧道：```printf '3\n3\n2\n1\n固定密钥\n固定域名' | sb```
-
-一键快捷命令现实域名分流：```printf '5\n2\n1\n后缀域名1 后缀域名2' | sb```
-
-
-### Sing-box-yg脚本界面预览图（注：相关参数随意填写，仅供围观）
-
-![1d5425c093618313888fe41a55f493f](https://github.com/user-attachments/assets/2b4b04a6-2de4-499a-afa1-ed78bccc50a8)
-
------------------------------------------------------
-
-### 二、Serv00/Hostuno一键三协议共存脚本（Serv00/Hostuno专用）：
-
-* 目前免费Serv00使用代理脚本有被封账号的风险，收费版Hostuno不受影响，可正常使用
-
-* 切勿与其他Serv00脚本混用！！！
-
-* 引用[老王eooce](https://github.com/eooce/Sing-box/blob/test/sb_00.sh)、[frankiejun](https://github.com/frankiejun/serv00-play/blob/main/start.sh)相关功能，支持一键三协议：vless-reality、vmess-ws(argo)、hysteria2
-
-* 主要增加reality协议默认支持 CF vless/trojan 节点的proxyip以及非标端口的优选反代IP功能
-
-* 聚合通用节点分享，支持到22个节点：三协议各自三个IP，argo全覆盖13个端口节点，已添加不死优选IP
-
-#### 相关说明及注意点请查看[甬哥博客说明与Serv00视频教程](https://ygkkk.blogspot.com/2025/01/serv00.html)
-
-#### 视频教程：
-
-[Serv00免费代理脚本最终教程（一）：独家支持三个IP自定义安装，支持Proxyip+反代IP、支持Argo临时/固定隧道+CDN回源；支持五个节点的Sing-box与Clash订阅配置输出](https://youtu.be/2VF9D6z2z7w)
-
-[Serv00免费代理脚本最终教程（二）：Serv00不必再登录SSH了，部署保活融为一体，独家支持Github、VPS、软路由多平台多账户通用部署，四大方案总有一款适合你](https://youtu.be/rYeX1iU_iZ0)
-
-[Serv00免费代理脚本最终教程（三）：多功能网页生成【保活+重启+重置端口+查看订阅节点】、随意重置端口功能；Github+Workers自动执行保活功能任你选！](https://youtu.be/9uCfFNnjNc0)
-
-[Serv00免费代理脚本最终教程（四）：重大更新！支持Argo临时/固定隧道相互切换，实时更新节点信息；完美适配Serv00收费版Hostuno.com](https://youtu.be/XN6_vpz1NhE)
-
-[Serv00免费代理脚本最终教程（五）：Github、VPS、软路由多平台脚本大更新！支持多功能网页，Cron内射保活+网页外射保活，任你选](https://youtu.be/tKaBdbU4G4s)
-
-### Serv00/Hostuno-sb-yg一键脚本 
-
-* Argo高度自定义：可以重置临时隧道; 可以继续使用上回的固定隧道; 也可以更换固定隧道的域名或token
-
-```
-bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/serv00.sh)
+```bash
+sb
 ```
 
-#### Serv00/Hostuno-sb-yg脚本界面预览图，仅限方案一的SSH端安装脚本（注：仅供围观）
-![a6b776a094566ab14e88fdcd70ba9e9](https://github.com/user-attachments/assets/90a918ed-aec7-4a1f-8159-97f3acfd0092)
+也可以直接：
 
+```bash
+sb status
+sb show
+sb restart
+sb logs
+sb uninstall
+```
 
------------------------------------------------------
-### 感谢支持！微信打赏甬哥侃侃侃ygkkk
-![41440820a366deeb8109db5610313a1](https://github.com/user-attachments/assets/5cd2d891-ae54-4397-8211-ac4c6d1099c9)
+`sb show` 会刷新 Cloudflare Tunnel 域名并输出完整 FlClash 配置。
 
----------------------------------------
-### 感谢你右上角的star🌟
-[![Stargazers over time](https://starchart.cc/yonggekkk/sing-box-yg.svg)](https://starchart.cc/yonggekkk/sing-box-yg)
+## 默认端口
 
----------------------------------------
-#### 声明：所有代码来源于Github社区与ChatGPT的整合
+| 功能 | 默认端口 | 协议 |
+|---|---:|---|
+| VLESS-Reality | 443 | TCP |
+| Hysteria2 | 8443 | UDP |
+| AnyTLS | 9443 | TCP |
+| VLESS-CF-WS 本地回源 | 8080 | TCP，仅监听 127.0.0.1 |
+
+VLESS-CF-WS 的 `8080` 不需要对公网开放。
+
+云厂商安全组至少需要放行：
+
+- TCP 443
+- UDP 8443
+- TCP 9443
+
+## 自定义端口
+
+安装前通过环境变量覆盖：
+
+```bash
+REALITY_PORT=10443 \
+HY2_PORT=18443 \
+ANYTLS_PORT=19443 \
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaolee9897/sing-box-google/main/sb.sh)
+```
+
+可用变量：
+
+```text
+REALITY_PORT
+HY2_PORT
+ANYTLS_PORT
+WS_PORT
+WS_PATH
+REALITY_SNI
+TLS_SNI
+SERVER_ADDR
+WARP_MODE
+CF_TUNNEL_TOKEN
+CF_HOST
+SING_BOX_VERSION
+CLOUDFLARED_VERSION
+WGCF_VERSION
+```
+
+## Cloudflare Tunnel
+
+### 默认：Quick Tunnel
+
+不填写任何 Cloudflare 参数即可安装：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaolee9897/sing-box-google/main/sb.sh)
+```
+
+脚本会启动 Quick Tunnel 并尝试自动提取：
+
+```text
+*.trycloudflare.com
+```
+
+Quick Tunnel 域名在服务重启后可能变化，因此更适合测试或备用节点。
+
+### 固定 Tunnel
+
+如果已经在 Cloudflare Zero Trust 中创建 Tunnel，并将 Public Hostname 的 Service 指向：
+
+```text
+http://localhost:8080
+```
+
+可以安装时传入：
+
+```bash
+CF_TUNNEL_TOKEN='你的 Tunnel Token' \
+CF_HOST='你的固定域名' \
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaolee9897/sing-box-google/main/sb.sh)
+```
+
+固定 Tunnel 更适合长期使用。
+
+## Cloudflare WARP
+
+默认：
+
+```text
+WARP_MODE=all
+```
+
+脚本会：
+
+1. 下载 `wgcf`
+2. 注册免费 WARP 设备
+3. 生成 WireGuard profile
+4. 转换为 sing-box 1.13+ WireGuard Endpoint
+5. 将 VPS 代理流量的默认出站设置为 WARP
+
+如果 WARP 注册失败，四个入站节点仍会继续安装，但会明确显示：
+
+```text
+CF WARP egress: OFF
+```
+
+如果明确不需要 WARP：
+
+```bash
+WARP_MODE=off bash <(curl -fsSL https://raw.githubusercontent.com/xiaolee9897/sing-box-google/main/sb.sh)
+```
+
+## FlClash 配置
+
+生成位置：
+
+```text
+/etc/singbox-google/flclash.yaml
+```
+
+配置包含：
+
+- VLESS-Reality
+- Hysteria2
+- AnyTLS
+- VLESS-CF-WS
+- `Proxy` 手动选择组
+- `Auto` 自动测速组
+
+查看：
+
+```bash
+sb show
+```
+
+文件包含真实节点凭据，请勿公开上传。
+
+## 文件布局
+
+```text
+/etc/singbox-google/
+├── config.json
+├── state.env
+├── server.crt
+├── server.key
+├── flclash.yaml
+├── run-cloudflared.sh
+└── warp/
+```
+
+程序：
+
+```text
+/usr/local/bin/sing-box
+/usr/local/bin/cloudflared
+/usr/local/bin/wgcf
+/usr/local/bin/sb
+```
+
+服务：
+
+```text
+singbox-google.service
+cloudflared-singbox-google.service
+```
+
+## 版本策略
+
+默认固定版本，避免上游最新版本突然改变配置格式导致一键脚本失效：
+
+```text
+sing-box     1.13.14
+cloudflared  2026.7.1
+wgcf         2.2.32
+```
+
+均可通过环境变量覆盖。
+
+## 安全说明
+
+- 不把 UUID、密码、Reality 私钥、WARP 私钥上传到 GitHub
+- `state.env`、`config.json`、`flclash.yaml` 权限为 root 本地文件
+- VLESS-WS 仅绑定 `127.0.0.1`
+- 不执行 `iptables -F`
+- 不自动关闭 UFW/firewalld
+- 不再把预编译代理二进制提交进仓库
+
+## 与旧版的关系
+
+本仓库最初基于社区 `sing-box-yg` 相关代码演化。此次重构保留仓库原有 GPL-3.0 License，并把 `main` 收敛为面向 VPS 的小型、可审计实现。
+
+旧版约 150 KB 的多用途 `sb.sh` 同时包含大量 Serv00、VMess、TUIC、订阅、保活、网页及兼容逻辑；当前版本按实际需求重写，不再继承这些未使用路径。
+
+## 免责声明
+
+仅用于合法的网络连接、隐私保护、测试与学习。使用者应遵守所在地法律法规及云服务商、Cloudflare 的服务条款。
